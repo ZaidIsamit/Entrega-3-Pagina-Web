@@ -1,0 +1,79 @@
+# Reservas UNAB · Hito 3
+# Levanta toda la plataforma:  docker compose up --build
+#   Frontend (React + nginx)  → http://localhost:8080
+#   API + Swagger             → http://localhost:3000/api/docs
+#   PostgreSQL                → localhost:5432
+#   MongoDB                   → localhost:27017
+# Los valores por defecto sirven solo para desarrollo local.
+# Para cambiarlos, copia .env.example como .env (el .env no se sube al repositorio).
+
+name: reservas-unab
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    command: ["postgres", "-c", "timezone=America/Santiago"]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-reservas_unab}
+      POSTGRES_USER: ${POSTGRES_USER:-reservas}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-reservas_dev}
+      TZ: America/Santiago
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_datos:/var/lib/postgresql/data
+      # Los scripts se ejecutan en orden la PRIMERA vez (cuando el volumen está vacío)
+      - ./database/postgres:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mongo:
+    image: mongo:7
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongo_datos:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    environment:
+      PORT: 3000
+      DATABASE_URL: postgres://${POSTGRES_USER:-reservas}:${POSTGRES_PASSWORD:-reservas_dev}@postgres:5432/${POSTGRES_DB:-reservas_unab}
+      MONGO_URL: mongodb://mongo:27017
+      MONGO_DB: ${MONGO_DB:-reservas_unab}
+      JWT_SECRET: ${JWT_SECRET:-solo_para_desarrollo_cambiar_en_produccion}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
+      CORS_ORIGINS: http://localhost:8080,http://localhost:5173
+      APP_TIMEZONE: America/Santiago
+    ports:
+      - "${API_PORT:-3000}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/salud"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  postgres_datos:
+  mongo_datos:

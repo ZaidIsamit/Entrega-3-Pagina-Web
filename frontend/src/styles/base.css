@@ -1,0 +1,302 @@
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--primary);
+}
+
+.min-w-0 {
+  min-width: 0;
+}
+
+.btn {
+  font-weight: 600;
+  border-radius: var(--radius);
+}
+
+/* Foco visible para teclado en todos los controles */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--red-600);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+.btn-primary {
+  --bs-btn-bg: var(--primary);
+  --bs-btn-border-color: var(--primary);
+  --bs-btn-hover-bg: var(--primary-hover);
+  --bs-btn-hover-border-color: var(--primary-hover);
+  --bs-btn-active-bg: var(--navy-900);
+  --bs-btn-active-border-color: var(--navy-900);
+  --bs-btn-disabled-bg: var(--primary);
+  --bs-btn-disabled-border-color: var(--primary);
+}
+
+.btn-outline-primary {
+  --bs-btn-color: var(--primary);
+  --bs-btn-border-color: var(--primary);
+  --bs-btn-hover-bg: var(--primary);
+  --bs-btn-hover-border-color: var(--primary);
+}
+
+.btn-link {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.form-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 0.35rem;
+}
+
+.form-control,
+.form-select {
+  border-color: var(--border);
+  border-radius: var(--radius);
+  min-height: 42px;
+}
+
+.form-control:focus,
+.form-select:focus,
+.form-check-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 0.2rem rgba(15, 42, 74, 0.14);
+}
+
+.form-check-input:checked {
+  background-color: var(--primary);
+  border-color: var(--primary);
+}
+
+.input-icon {
+  position: relative;
+}
+
+.input-icon > .bi {
+  position: absolute;
+  left: 0.85rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.input-icon > .form-control {
+  padding-left: 2.4rem;
+}
+
+.input-icon > .form-control.is-invalid {
+  background-position: right 0.75rem center;
+}
+
+/* Contexto sobre el título: una marca roja como en los letreros del campus */
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.eyebrow::before {
+  content: "";
+  width: 14px;
+  height: 3px;
+  background: var(--red-600);
+}
+
+.page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.75rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 2px solid var(--navy-900);
+}
+
+/* Títulos con tipografía de señalética: condensada, gruesa y compacta */
+.page-title {
+  font-size: clamp(2rem, 1.3rem + 3vw, 3.4rem);
+  font-weight: 800;
+  font-stretch: var(--stretch-sign);
+  line-height: 0.95;
+  letter-spacing: -0.01em;
+  color: var(--navy-900);
+  margin: 0.35rem 0 0.6rem;
+}
+
+h1, h2, h3, .h4, .h5, .h6, .modal-title {
+  font-stretch: 88%;
+}
+
+.page-lead {
+  color: var(--text-muted);
+  margin: 0;
+  max-width: 60ch;
+}
+
+.modal-content {
+  border: 0;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+.modal-header {
+  border-bottom-color: var(--border);
+  padding: 1.1rem 1.4rem;
+  align-items: flex-start;
+}
+
+.modal-subtitle {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin-top: 0.15rem;
+}
+
+.modal-body {
+  padding: 1.25rem 1.4rem;
+}
+
+.modal-footer {
+  border-top-color: var(--border);
+}
+
+.modal-backdrop.show {
+  opacity: 0.6;
+  background: var(--navy-950);
+}
+
+@media (max-width: 575.98px) {
+  .modal-fullscreen-sm-down .modal-content {
+    border-radius: 0;
+  }
+}
+
+.empty-state {
+  text-align: center;
+  background: transparent;
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 2.5rem 1.25rem;
+}
+
+.empty-icon {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 0.75rem;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius);
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 1.5rem;
+}
+
+.skeleton {
+  display: block;
+  border-radius: 8px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.12));
+  background-size: 200% 100%;
+  animation: shimmer 1.2s infinite linear;
+}
+
+.skeleton-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.skeleton-line {
+  height: 12px;
+  margin: 8px 0;
+}
+
+.skeleton-chip {
+  width: 96px;
+  height: 26px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--surface-alt), #e6eaf2, var(--surface-alt));
+  background-size: 200% 100%;
+}
+
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+.toast-area {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 1080;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: min(380px, calc(100vw - 2rem));
+}
+
+.app-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius);
+  color: #fff;
+  box-shadow: var(--shadow-lg);
+  animation: toast-in 0.25s ease-out;
+}
+
+.app-toast > .bi {
+  font-size: 1.25rem;
+}
+
+.toast-exito {
+  background: #11613f;
+}
+
+.toast-info {
+  background: var(--navy-800);
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (max-width: 767.98px) {
+  .toast-area {
+    left: 1rem;
+    right: 1rem;
+    width: auto;
+    bottom: 1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+.modal-title {
+  font-size: 1.9rem;
+  font-weight: 800;
+  font-stretch: var(--stretch-sign);
+  line-height: 1;
+  color: var(--navy-900);
+}
