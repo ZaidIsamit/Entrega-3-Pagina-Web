@@ -75,7 +75,7 @@ Este es el flujo completo con datos reales. Uno: un estudiante elige un bloque l
 
 **Zaid Isamit Alvial**
 
-Cualquier persona puede ejecutar el proyecto con docker compose: se levantan el frontend, el backend, PostgreSQL y MongoDB; el backend espera a que las bases estén listas y los datos de prueba se cargan solos. El repositorio está en GitHub, con un README que explica arquitectura, API, ejecución y limitaciones. Tenemos 25 pruebas unitarias y 22 de integración contra la API real, y todas pasan. Usamos Claude Code como apoyo y lo declaramos en el README; todo lo generado lo validamos revisando el código, ejecutando las pruebas y probando cada flujo.
+Cualquier persona puede ejecutar el proyecto con docker compose: se levantan el frontend, el backend, PostgreSQL y MongoDB; el backend espera a que las bases estén listas y los datos de prueba se cargan solos. El repositorio Entrega-3-Pagina-Web en GitHub usa ramas main, develop y una rama por funcionalidad, y su README explica arquitectura, API, ejecución y limitaciones. Tenemos 25 pruebas unitarias y 22 de integración contra la API real, y todas pasan. Usamos Claude Code como apoyo y lo declaramos en el README; todo lo generado lo validamos revisando el código, ejecutando las pruebas y probando cada flujo. Con este botón abrimos la plataforma funcionando.
 
 ## 10. 09. Resultado y decisiones · 0:35
 
