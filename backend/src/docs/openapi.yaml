@@ -1,0 +1,861 @@
+openapi: 3.0.3
+info:
+  title: Reservas UNAB · API REST
+  version: 3.0.0
+  description: |
+    API del Hito 3 de **Reservas UNAB** (gestión de espacios universitarios).
+
+    **Cómo probarla**
+    1. Ejecuta `POST /auth/login` con un usuario de prueba (contraseña `unab2026`):
+       - `11.111.111-1` → Administrador
+       - `21.668.839-2` → Docente (sus reservas se aprueban automáticamente)
+       - `21.993.115-8` → Estudiante (sus reservas quedan pendientes)
+    2. Copia el `token` de la respuesta, presiona **Authorize** e ingrésalo.
+    3. Prueba el resto de los endpoints.
+
+    **Persistencia**: PostgreSQL guarda usuarios, edificios, espacios, equipamiento y reservas.
+    MongoDB guarda la colección `eventos` (historial de reservas, auditoría y actividad).
+
+    **Errores**: todas las respuestas de error tienen la forma
+    `{ "error": { "codigo": "...", "mensaje": "...", "detalles": ... } }`.
+servers:
+  - url: /api
+    description: Mismo servidor
+tags:
+  - name: Autenticación
+  - name: Catálogos
+  - name: Edificios
+  - name: Equipamiento
+  - name: Espacios
+  - name: Reservas
+  - name: Indicadores y actividad
+  - name: Sistema
+
+security:
+  - bearerAuth: []
+
+paths:
+  /salud:
+    get:
+      tags: [Sistema]
+      summary: Estado de la API y de las bases de datos
+      security: []
+      responses:
+        "200":
+          description: PostgreSQL y MongoDB disponibles
+          content:
+            application/json:
+              example: { estado: ok, postgres: ok, mongo: ok, hora: "2026-11-04T15:00:00.000Z" }
+        "503":
+          description: Alguna base de datos no responde
+
+  /auth/login:
+    post:
+      tags: [Autenticación]
+      summary: Iniciar sesión con RUT y contraseña
+      description: Devuelve un JWT válido por 8 horas. Registra el evento SESION_INICIADA o SESION_FALLIDA en MongoDB.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Login" }
+            examples:
+              administrador: { value: { rut: "11.111.111-1", password: unab2026 } }
+              docente: { value: { rut: "21.668.839-2", password: unab2026 } }
+              estudiante: { value: { rut: "21.993.115-8", password: unab2026 } }
+      responses:
+        "200":
+          description: Sesión iniciada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+                  usuario: { $ref: "#/components/schemas/Usuario" }
+        "400": { $ref: "#/components/responses/SolicitudInvalida" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+
+  /auth/perfil:
+    get:
+      tags: [Autenticación]
+      summary: Usuario de la sesión actual
+      responses:
+        "200":
+          description: Usuario autenticado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Usuario" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+
+  /sedes:
+    get:
+      tags: [Catálogos]
+      summary: Listar sedes (con coordenadas para el clima)
+      responses:
+        "200":
+          description: Sedes
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Sede" } }
+
+  /tipos-espacio:
+    get:
+      tags: [Catálogos]
+      summary: Listar tipos de espacio
+      responses:
+        "200":
+          description: Tipos de espacio
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/TipoEspacio" } }
+
+  /edificios:
+    get:
+      tags: [Edificios]
+      summary: Listar edificios
+      parameters:
+        - { in: query, name: sedeId, schema: { type: string }, example: santiago }
+      responses:
+        "200":
+          description: Edificios
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Edificio" } }
+    post:
+      tags: [Edificios]
+      summary: Crear edificio (administración)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EdificioEntrada" }
+            example: { sedeId: santiago, nombre: Edificio R3, direccion: Av. República 400, pisos: 3 }
+      responses:
+        "201":
+          description: Edificio creado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Edificio" }
+        "400": { $ref: "#/components/responses/SolicitudInvalida" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "409": { $ref: "#/components/responses/Conflicto" }
+
+  /edificios/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    put:
+      tags: [Edificios]
+      summary: Actualizar edificio (administración)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EdificioEntrada" }
+      responses:
+        "200":
+          description: Edificio actualizado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Edificio" }
+        "400": { $ref: "#/components/responses/SolicitudInvalida" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409": { $ref: "#/components/responses/Conflicto" }
+    delete:
+      tags: [Edificios]
+      summary: Eliminar edificio sin espacios (administración)
+      responses:
+        "204": { description: Eliminado }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409": { $ref: "#/components/responses/Conflicto" }
+
+  /equipamiento:
+    get:
+      tags: [Equipamiento]
+      summary: Listar equipamiento
+      responses:
+        "200":
+          description: Equipamiento
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Equipamiento" } }
+    post:
+      tags: [Equipamiento]
+      summary: Crear equipamiento (administración)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EquipamientoEntrada" }
+            example: { nombre: Parlantes, icono: bi-speaker }
+      responses:
+        "201":
+          description: Creado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Equipamiento" }
+        "400": { $ref: "#/components/responses/SolicitudInvalida" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "409": { $ref: "#/components/responses/Conflicto" }
+
+  /equipamiento/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    put:
+      tags: [Equipamiento]
+      summary: Actualizar equipamiento (administración)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EquipamientoEntrada" }
+      responses:
+        "200":
+          description: Actualizado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Equipamiento" }
+        "400": { $ref: "#/components/responses/SolicitudInvalida" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409": { $ref: "#/components/responses/Conflicto" }
+    delete:
+      tags: [Equipamiento]
+      summary: Eliminar equipamiento no asignado (administración)
+      responses:
+        "204": { description: Eliminado }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409": { $ref: "#/components/responses/Conflicto" }
+
+  /espacios:
+    get:
+      tags: [Espacios]
+      summary: Listar espacios con filtros
+      parameters:
+        - { in: query, name: sedeId, schema: { type: string }, example: santiago }
+        - { in: query, name: tipoId, schema: { type: integer } }
+        - { in: query, name: edificioId, schema: { type: integer } }
+        - { in: query, name: capacidadMin, schema: { type: integer }, description: Personas mínimas que debe admitir }
+        - { in: query, name: q, schema: { type: string }, description: Busca en nombre, código, edificio, tipo y equipamiento }
+        - { in: query, name: estado, schema: { type: string, enum: [disponible, mantencion, inactivo] } }
+        - { in: query, name: incluirInactivos, schema: { type: boolean }, description: Solo administración }
+      responses:
+        "200":
+          description: Espacios
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Espacio" } }
+        "400": { $ref: "#/components/responses/SolicitudInvalida" }
+    post:
+      tags: [Espacios]
+      summary: Crear espacio (administración)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EspacioEntrada" }
+            example:
+              codigo: R1-305
+              nombre: Sala R1-305
+              tipoId: 1
+              edificioId: 1
+              piso: 3
+              capacidad: 35
+              exterior: false
+              estado: disponible
+              descripcion: Sala nueva del tercer piso
+              equipamiento: [{ equipamientoId: 1, cantidad: 1 }]
+      responses:
+        "201":
+          description: Espacio creado (se registra ESPACIO_CREADO en MongoDB)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Espacio" }
+        "400": { $ref: "#/components/responses/SolicitudInvalida" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "409": { $ref: "#/components/responses/Conflicto" }
+
+  /espacios/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Espacios]
+      summary: Detalle de un espacio
+      responses:
+        "200":
+          description: Espacio
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Espacio" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+    put:
+      tags: [Espacios]
+      summary: Actualizar espacio, su estado y su equipamiento (administración)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EspacioEntrada" }
+      responses:
+        "200":
+          description: Espacio actualizado (se registran los cambios en MongoDB)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Espacio" }
+        "400": { $ref: "#/components/responses/SolicitudInvalida" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409": { $ref: "#/components/responses/Conflicto" }
+    delete:
+      tags: [Espacios]
+      summary: Eliminar espacio sin reservas (administración)
+      description: Si el espacio tiene reservas responde 409; en ese caso se debe cambiar su estado a "inactivo".
+      responses:
+        "204": { description: Eliminado }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409": { $ref: "#/components/responses/Conflicto" }
+
+  /espacios/{id}/disponibilidad:
+    get:
+      tags: [Espacios]
+      summary: Estado de cada bloque horario de un espacio en una fecha
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - { in: query, name: fecha, required: true, schema: { type: string, format: date } }
+      responses:
+        "200":
+          description: Bloques de 08:00 a 21:00
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Disponibilidad" }
+        "400": { $ref: "#/components/responses/SolicitudInvalida" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+
+  /reservas/ocupacion:
+    get:
+      tags: [Reservas]
+      summary: Bloques ocupados de todos los espacios de una sede en una fecha
+      description: No incluye datos personales de otros usuarios; solo indica si la reserva es propia.
+      parameters:
+        - { in: query, name: sedeId, required: true, schema: { type: string }, example: santiago }
+        - { in: query, name: fecha, required: true, schema: { type: string, format: date } }
+      responses:
+        "200":
+          description: Ocupación
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/BloqueOcupado" } }
+        "400": { $ref: "#/components/responses/SolicitudInvalida" }
+
+  /reservas/mias:
+    get:
+      tags: [Reservas]
+      summary: Reservas del usuario actual
+      parameters:
+        - { in: query, name: alcance, schema: { type: string, enum: [proximas, historial, todas], default: proximas } }
+        - { in: query, name: estado, schema: { $ref: "#/components/schemas/EstadoReserva" } }
+      responses:
+        "200":
+          description: Reservas
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Reserva" } }
+
+  /reservas:
+    get:
+      tags: [Reservas]
+      summary: Todas las reservas con filtros (administración)
+      parameters:
+        - { in: query, name: estado, schema: { $ref: "#/components/schemas/EstadoReserva" } }
+        - { in: query, name: fecha, schema: { type: string, format: date } }
+        - { in: query, name: desde, schema: { type: string, format: date } }
+        - { in: query, name: hasta, schema: { type: string, format: date } }
+        - { in: query, name: sedeId, schema: { type: string } }
+        - { in: query, name: espacioId, schema: { type: integer } }
+      responses:
+        "200":
+          description: Reservas
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Reserva" } }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+    post:
+      tags: [Reservas]
+      summary: Solicitar una reserva
+      description: |
+        Reglas que se validan:
+        - el espacio debe estar `disponible` (no en mantención ni inactivo);
+        - el bloque debe ser futuro, entre 08:00 y 21:00, y con hasta 60 días de anticipación;
+        - la duración no puede superar el máximo del rol (Estudiante 2 h, Organización 3 h, Docente 4 h);
+        - las personas no pueden superar la capacidad;
+        - **no puede traslaparse con otra reserva pendiente o aprobada del espacio** (409);
+        - el usuario no puede tener otra reserva en ese mismo horario (409).
+
+        Estudiantes y organizaciones quedan en `pendiente`; docentes y administración en `aprobada`.
+        Cada intento rechazado por conflicto se registra en MongoDB como `RESERVA_CONFLICTO`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReservaEntrada" }
+            example: { espacioId: 1, fecha: "2026-11-10", horaInicio: 10, duracion: 2, personas: 20, motivo: Ayudantía de cálculo }
+      responses:
+        "201":
+          description: Reserva creada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Reserva" }
+        "400": { $ref: "#/components/responses/SolicitudInvalida" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409": { $ref: "#/components/responses/Conflicto" }
+        "422": { $ref: "#/components/responses/ReglaNegocio" }
+
+  /reservas/{id}:
+    get:
+      tags: [Reservas]
+      summary: Detalle de una reserva (propia o administración)
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200":
+          description: Reserva
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Reserva" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+
+  /reservas/{id}/historial:
+    get:
+      tags: [Reservas]
+      summary: Línea de tiempo de una reserva (desde MongoDB)
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200":
+          description: Eventos ordenados del más antiguo al más reciente
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Evento" } }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+
+  /reservas/{id}/aprobar:
+    patch:
+      tags: [Reservas]
+      summary: Aprobar solicitud pendiente (administración)
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200":
+          description: Reserva aprobada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Reserva" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409": { $ref: "#/components/responses/Conflicto" }
+        "422": { $ref: "#/components/responses/ReglaNegocio" }
+
+  /reservas/{id}/rechazar:
+    patch:
+      tags: [Reservas]
+      summary: Rechazar solicitud pendiente con motivo (administración)
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [motivo]
+              properties:
+                motivo: { type: string, minLength: 5, maxLength: 200 }
+            example: { motivo: El espacio se usará para un evento institucional. }
+      responses:
+        "200":
+          description: Reserva rechazada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Reserva" }
+        "400": { $ref: "#/components/responses/SolicitudInvalida" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "422": { $ref: "#/components/responses/ReglaNegocio" }
+
+  /reservas/{id}/cancelar:
+    patch:
+      tags: [Reservas]
+      summary: Cancelar una reserva propia (o cualquiera, si es administración)
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                motivo: { type: string, maxLength: 200, nullable: true }
+            example: { motivo: Se suspendió la actividad. }
+      responses:
+        "200":
+          description: Reserva cancelada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Reserva" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "422": { $ref: "#/components/responses/ReglaNegocio" }
+
+  /indicadores:
+    get:
+      tags: [Indicadores y actividad]
+      summary: Panel de utilización (administración)
+      description: Combina datos de PostgreSQL (reservas) y MongoDB (actividad y demanda insatisfecha).
+      parameters:
+        - { in: query, name: desde, schema: { type: string, format: date }, description: Por defecto hoy - 30 días }
+        - { in: query, name: hasta, schema: { type: string, format: date }, description: Por defecto hoy + 14 días }
+        - { in: query, name: sedeId, schema: { type: string } }
+      responses:
+        "200":
+          description: Indicadores
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Indicadores" }
+        "400": { $ref: "#/components/responses/SolicitudInvalida" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+
+  /actividad:
+    get:
+      tags: [Indicadores y actividad]
+      summary: Bitácora de auditoría (MongoDB, administración)
+      parameters:
+        - { in: query, name: categoria, schema: { type: string, enum: [reserva, infraestructura, sesion] } }
+        - { in: query, name: tipo, schema: { type: string }, example: RESERVA_CANCELADA }
+        - { in: query, name: usuarioId, schema: { type: integer } }
+        - { in: query, name: antesDe, schema: { type: string }, description: id del último evento recibido (paginación) }
+        - { in: query, name: limite, schema: { type: integer, default: 30, maximum: 100 } }
+      responses:
+        "200":
+          description: Eventos, del más reciente al más antiguo
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Evento" } }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+
+  /actividad/mia:
+    get:
+      tags: [Indicadores y actividad]
+      summary: Actividad del usuario actual (MongoDB)
+      parameters:
+        - { in: query, name: antesDe, schema: { type: string } }
+        - { in: query, name: limite, schema: { type: integer, default: 30 } }
+      responses:
+        "200":
+          description: Eventos
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Evento" } }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    Id:
+      in: path
+      name: id
+      required: true
+      schema: { type: integer, minimum: 1 }
+
+  responses:
+    SolicitudInvalida:
+      description: Datos inválidos
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error:
+              codigo: SOLICITUD_INVALIDA
+              mensaje: Hay datos inválidos en la solicitud.
+              detalles: [{ campo: personas, mensaje: Debe asistir al menos 1 persona. }]
+    NoAutenticado:
+      description: Falta el token o no es válido
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    SinPermiso:
+      description: El usuario no tiene permiso
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NoEncontrado:
+      description: El recurso no existe
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Conflicto:
+      description: Conflicto con el estado actual (doble reserva, duplicado, recurso en uso)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error:
+              codigo: CONFLICTO
+              mensaje: Sala R1-101 ya está reservado de 10:00 a 12:00 ese día.
+              detalles: { horaInicio: 10, horaFin: 12 }
+    ReglaNegocio:
+      description: La solicitud no cumple una regla de negocio
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error:
+              codigo: DURACION_EXCEDIDA
+              mensaje: Tu rol (Estudiante) permite reservar como máximo 2 horas seguidas.
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            codigo: { type: string }
+            mensaje: { type: string }
+            detalles: {}
+
+    Login:
+      type: object
+      required: [rut, password]
+      properties:
+        rut: { type: string, example: "21.668.839-2" }
+        password: { type: string, example: unab2026 }
+
+    Usuario:
+      type: object
+      properties:
+        id: { type: integer }
+        rut: { type: string }
+        nombre: { type: string }
+        email: { type: string }
+        activo: { type: boolean }
+        rol:
+          type: object
+          properties:
+            id: { type: integer }
+            nombre: { type: string }
+            slug: { type: string }
+            maxHorasReserva: { type: integer }
+            requiereAprobacion: { type: boolean }
+            esAdmin: { type: boolean }
+
+    Sede:
+      type: object
+      properties:
+        id: { type: string }
+        nombre: { type: string }
+        ciudad: { type: string }
+        latitud: { type: number }
+        longitud: { type: number }
+
+    TipoEspacio:
+      type: object
+      properties:
+        id: { type: integer }
+        nombre: { type: string }
+        icono: { type: string }
+        color: { type: string }
+
+    EdificioEntrada:
+      type: object
+      required: [sedeId, nombre, pisos]
+      properties:
+        sedeId: { type: string }
+        nombre: { type: string, minLength: 3, maxLength: 80 }
+        direccion: { type: string, nullable: true }
+        pisos: { type: integer, minimum: 1, maximum: 50 }
+
+    Edificio:
+      type: object
+      properties:
+        id: { type: integer }
+        nombre: { type: string }
+        direccion: { type: string, nullable: true }
+        pisos: { type: integer }
+        sede: { type: object, properties: { id: { type: string }, nombre: { type: string } } }
+        totalEspacios: { type: integer }
+
+    EquipamientoEntrada:
+      type: object
+      required: [nombre]
+      properties:
+        nombre: { type: string, minLength: 2, maxLength: 50 }
+        icono: { type: string, example: bi-wifi }
+
+    Equipamiento:
+      type: object
+      properties:
+        id: { type: integer }
+        nombre: { type: string }
+        icono: { type: string }
+        totalEspacios: { type: integer }
+
+    EspacioEntrada:
+      type: object
+      required: [codigo, nombre, tipoId, edificioId, piso, capacidad]
+      properties:
+        codigo: { type: string, pattern: "^[A-Z0-9-]{2,20}$" }
+        nombre: { type: string }
+        tipoId: { type: integer }
+        edificioId: { type: integer }
+        piso: { type: integer, minimum: 0 }
+        capacidad: { type: integer, minimum: 1, maximum: 500 }
+        exterior: { type: boolean }
+        estado: { type: string, enum: [disponible, mantencion, inactivo] }
+        descripcion: { type: string, nullable: true }
+        equipamiento:
+          type: array
+          items:
+            type: object
+            properties:
+              equipamientoId: { type: integer }
+              cantidad: { type: integer, minimum: 1 }
+
+    Espacio:
+      type: object
+      properties:
+        id: { type: integer }
+        codigo: { type: string }
+        nombre: { type: string }
+        piso: { type: integer }
+        capacidad: { type: integer }
+        exterior: { type: boolean }
+        estado: { type: string, enum: [disponible, mantencion, inactivo] }
+        descripcion: { type: string, nullable: true }
+        tipo: { $ref: "#/components/schemas/TipoEspacio" }
+        edificio: { type: object, properties: { id: { type: integer }, nombre: { type: string } } }
+        sede: { type: object, properties: { id: { type: string }, nombre: { type: string } } }
+        equipamiento:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              nombre: { type: string }
+              icono: { type: string }
+              cantidad: { type: integer }
+
+    Disponibilidad:
+      type: object
+      properties:
+        espacio: { type: object }
+        fecha: { type: string, format: date }
+        reservable: { type: boolean }
+        maxHorasRol: { type: integer }
+        bloques:
+          type: array
+          items:
+            type: object
+            properties:
+              hora: { type: integer, example: 10 }
+              estado: { type: string, enum: [libre, ocupado, pendiente, mio, pasado] }
+
+    BloqueOcupado:
+      type: object
+      properties:
+        espacioId: { type: integer }
+        horaInicio: { type: integer }
+        horaFin: { type: integer }
+        estado: { type: string, enum: [pendiente, aprobada] }
+        propia: { type: boolean }
+        reservaId: { type: integer, nullable: true }
+
+    EstadoReserva:
+      type: string
+      enum: [pendiente, aprobada, rechazada, cancelada]
+
+    ReservaEntrada:
+      type: object
+      required: [espacioId, fecha, horaInicio, duracion, personas, motivo]
+      properties:
+        espacioId: { type: integer }
+        fecha: { type: string, format: date }
+        horaInicio: { type: integer, minimum: 8, maximum: 20 }
+        duracion: { type: integer, minimum: 1 }
+        personas: { type: integer, minimum: 1 }
+        motivo: { type: string, minLength: 5, maxLength: 200 }
+
+    Reserva:
+      type: object
+      properties:
+        id: { type: integer }
+        fecha: { type: string, format: date }
+        horaInicio: { type: integer }
+        horaFin: { type: integer }
+        duracion: { type: integer }
+        personas: { type: integer }
+        motivo: { type: string }
+        estado: { $ref: "#/components/schemas/EstadoReserva" }
+        motivoRechazo: { type: string, nullable: true }
+        revisadaEn: { type: string, format: date-time, nullable: true }
+        canceladaEn: { type: string, format: date-time, nullable: true }
+        creadaEn: { type: string, format: date-time }
+        espacio: { type: object }
+        solicitante:
+          type: object
+          properties:
+            id: { type: integer }
+            nombre: { type: string }
+            rut: { type: string }
+            rol: { type: string }
+        revisor: { type: object, nullable: true }
+
+    Evento:
+      type: object
+      description: Documento de la colección "eventos" de MongoDB
+      properties:
+        id: { type: string, example: 6728f0c2a1b2c3d4e5f60718 }
+        tipo: { type: string, example: RESERVA_CANCELADA }
+        categoria: { type: string, enum: [reserva, infraestructura, sesion] }
+        fecha: { type: string, format: date-time }
+        actor:
+          type: object
+          nullable: true
+          properties:
+            usuarioId: { type: integer }
+            nombre: { type: string }
+            rol: { type: string }
+        entidad:
+          type: object
+          properties:
+            tipo: { type: string, enum: [reserva, espacio, edificio, equipamiento, usuario] }
+            id: { type: integer, nullable: true }
+            etiqueta: { type: string }
+        detalle: { type: object, description: Datos propios de cada tipo de evento }
+
+    Indicadores:
+      type: object
+      properties:
+        periodo: { type: object }
+        resumen:
+          type: object
+          properties:
+            totalSolicitudes: { type: integer }
+            porEstado: { type: object }
+            horasAprobadas: { type: integer }
+            horasDisponibles: { type: integer }
+            tasaOcupacion: { type: number, description: Porcentaje }
+            tasaAprobacion: { type: number }
+            tasaCancelacion: { type: number }
+            tiempoMedioRespuestaHoras: { type: number, nullable: true }
+            espaciosReservables: { type: integer }
+        porEspacio: { type: array, items: { type: object } }
+        porTipo: { type: array, items: { type: object } }
+        porHora: { type: array, items: { type: object } }
+        porDia: { type: array, items: { type: object } }
+        actividad:
+          type: object
+          properties:
+            eventosPorTipo: { type: array, items: { type: object } }
+            demandaInsatisfecha: { type: array, items: { type: object } }
